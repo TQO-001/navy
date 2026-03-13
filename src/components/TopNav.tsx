@@ -4,18 +4,18 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  Briefcase, 
-  FileText, 
-  Users, 
-  Calendar, 
-  LogOut, 
-  Menu, 
-  X, 
-  Anchor,
+import {
+  LayoutDashboard,
+  Briefcase,
+  FileText,
+  Users,
+  Calendar,
+  LogOut,
+  Menu,
+  X,
   Sun,
-  Moon
+  Moon,
+  UserCircle,
 } from 'lucide-react';
 import { useTheme } from "./ThemeProvider";
 
@@ -24,11 +24,11 @@ interface TopNavProps {
 }
 
 const navLinks = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/applications', label: 'Job Board', icon: Briefcase },
-  { href: '/documents', label: 'Documents', icon: FileText },
-  { href: '/contacts', label: 'Contacts', icon: Users },
-  { href: '/calendar', label: 'Calendar', icon: Calendar },
+  { href: '/dashboard',    label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/applications', label: 'Job Board',  icon: Briefcase },
+  { href: '/documents',    label: 'Documents',  icon: FileText },
+  { href: '/contacts',     label: 'Contacts',   icon: Users },
+  { href: '/calendar',     label: 'Calendar',   icon: Calendar },
 ];
 
 export default function TopNav({ user }: TopNavProps) {
@@ -38,15 +38,15 @@ export default function TopNav({ user }: TopNavProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   async function handleLogout() {
-    await fetch('/api/auth/logout', { 
+    await fetch('/api/auth/logout', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
     });
     router.push('/login');
     router.refresh();
   }
 
-  const isActive = (href: string) => 
+  const isActive = (href: string) =>
     href === '/dashboard' ? pathname === href : pathname.startsWith(href);
 
   return (
@@ -54,22 +54,17 @@ export default function TopNav({ user }: TopNavProps) {
       <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
 
-          {/* Logo Section */}
+          {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-3 group">
             <div className="relative w-8 h-8 transition-transform group-hover:scale-110">
-               <Image 
-                src="/logo.png" 
-                alt="Navy Logo" 
-                fill
-                className="object-contain"
-              />
+              <Image src="/logo.png" alt="Navy Logo" fill className="object-contain" />
             </div>
-            <span className="text-xl font-semibold tracking-tight text-white uppercase group-hover:text-purple-400 transition-colors">
+            <span className="text-xl font-semibold tracking-tight text-white uppercase group-hover:text-blue-400 transition-colors">
               Navy
             </span>
           </Link>
 
-          {/* Desktop Navigation - Slim Typography */}
+          {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-1">
             {navLinks.map(({ href, label, icon: Icon }) => {
               const active = isActive(href);
@@ -90,31 +85,43 @@ export default function TopNav({ user }: TopNavProps) {
             })}
           </div>
 
-          {/* Actions Section */}
-          <div className="hidden md:flex items-center gap-4">
+          {/* Actions */}
+          <div className="hidden md:flex items-center gap-3">
             <button
               onClick={toggle}
+              title="Toggle theme"
               className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
             >
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
-            <div className="h-4 w-px bg-white/10 mx-1" />
+            <div className="h-4 w-px bg-white/10" />
 
-            <span className="text-[12px] font-mono text-gray-500 bg-white/5 px-2 py-1 rounded-md border border-white/5">
-              {user.name.toLowerCase().replace(' ', '.')}
-            </span>
+            {/* Profile Link */}
+            <Link
+              href="/profile"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all border ${
+                isActive('/profile')
+                  ? 'bg-blue-500/10 border-blue-500/20 text-blue-400'
+                  : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:border-white/10'
+              }`}
+            >
+              <UserCircle size={15} />
+              <span className="font-mono">
+                {user.name.toLowerCase().replace(' ', '.')}
+              </span>
+            </Link>
 
             <button
               onClick={handleLogout}
-              className="group flex items-center gap-2 text-[13px] font-semibold text-gray-400 hover:text-red-400 transition-colors"
+              className="group flex items-center gap-2 text-[13px] font-semibold text-gray-500 hover:text-red-400 transition-colors"
             >
-              <LogOut size={16} className="group-hover:-translate-x-1 transition-transform" />
+              <LogOut size={16} className="group-hover:-translate-x-0.5 transition-transform" />
               Sign out
             </button>
           </div>
 
-          {/* Mobile menu toggle */}
+          {/* Mobile toggle */}
           <button
             className="md:hidden p-2 rounded-xl text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -124,7 +131,7 @@ export default function TopNav({ user }: TopNavProps) {
         </div>
       </div>
 
-      {/* Mobile Menu - Glassmorphism */}
+      {/* Mobile Menu */}
       {mobileOpen && (
         <div className="md:hidden bg-[#05070a] border-t border-white/5 px-4 py-4 space-y-2 animate-in slide-in-from-top-2 duration-200">
           {navLinks.map(({ href, label, icon: Icon }) => (
@@ -142,14 +149,26 @@ export default function TopNav({ user }: TopNavProps) {
               {label}
             </Link>
           ))}
-          
+
           <div className="pt-4 mt-2 border-t border-white/5 space-y-2">
-             <button
+            <Link
+              href="/profile"
+              onClick={() => setMobileOpen(false)}
+              className={`flex w-full items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                isActive('/profile')
+                  ? 'bg-blue-500/10 text-blue-400 border border-blue-500/10'
+                  : 'text-gray-400 hover:bg-white/5'
+              }`}
+            >
+              <UserCircle size={18} />
+              Profile & Settings
+            </Link>
+            <button
               onClick={toggle}
               className="flex w-full items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-400 hover:bg-white/5"
             >
               {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-              Theme
+              {theme === "dark" ? "Light Mode" : "Dark Mode"}
             </button>
             <button
               onClick={handleLogout}
