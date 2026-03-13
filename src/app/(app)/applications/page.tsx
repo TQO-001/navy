@@ -12,11 +12,20 @@ export default async function ApplicationsPage({
 }) {
   const user = await getAuthUser()
   if (!user) redirect("/login")
-  const { status: filterStatus, q, view } = await searchParams
+
+  // Next.js 15+ requires awaiting searchParams
+  const resolvedSearchParams = await searchParams
+  const filterStatus = resolvedSearchParams.status
+  const q = resolvedSearchParams.q
+  const view = resolvedSearchParams.view
+
   const allApps = await getApplicationsByUserId(user.userId)
+  
   const counts = STATUS_ORDER.reduce((acc, s) => {
-    acc[s] = allApps.filter(a => a.status === s).length; return acc
+    acc[s] = allApps.filter(a => a.status === s).length
+    return acc
   }, {} as Record<ApplicationStatus, number>)
+
   const filtered = allApps.filter(app => {
     if (filterStatus && app.status !== filterStatus) return false
     if (q) {
@@ -29,6 +38,7 @@ export default async function ApplicationsPage({
     }
     return true
   })
+
   return (
     <ApplicationsView
       allApps={allApps}

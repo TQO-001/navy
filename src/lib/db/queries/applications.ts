@@ -1,19 +1,35 @@
 import sql from "@/lib/db"
-import type { Application, CreateApplicationRequest } from "@/types"
+import type { Application, CreateApplicationRequest, Document } from "@/types"
+
+/**
+ * FETCHING LOGIC
+ */
 
 export async function getApplicationsByUserId(userId: string): Promise<Application[]> {
+  if (!userId) return []
+  
   return await sql<Application[]>`
-    SELECT * FROM applications WHERE user_id = ${userId} ORDER BY updated_at DESC
-  `.then(r => r)
+    SELECT * FROM applications 
+    WHERE user_id = ${userId} 
+    ORDER BY updated_at DESC
+  `
 }
 
 export async function getApplicationById(
   id: string,
   userId: string
 ): Promise<Application | null> {
+  // Guard clause to prevent UNDEFINED_VALUE runtime errors
+  if (!id || !userId) {
+    console.warn("getApplicationById called with missing parameters:", { id, userId })
+    return null
+  }
+
   const rows = await sql<Application[]>`
-    SELECT * FROM applications WHERE id = ${id} AND user_id = ${userId} LIMIT 1
-  `.then(r => r)
+    SELECT * FROM applications 
+    WHERE id = ${id} AND user_id = ${userId} 
+    LIMIT 1
+  `
 
   if (!rows.length) return null
   const app = rows[0]
@@ -22,15 +38,28 @@ export async function getApplicationById(
     SELECT * FROM application_events
     WHERE application_id = ${id}
     ORDER BY event_date DESC, created_at DESC
-  `.then(r => r)
+  `
 
   return { ...app, events: events as unknown as Application["events"] }
 }
+
+/**
+ * MUTATION LOGIC
+ */
 
 export async function createApplication(
   userId: string,
   data: CreateApplicationRequest
 ): Promise<Application> {
+  if (!userId) throw new Error("User ID is required to create an application")
+
+  // Helper to ensure empty strings or bad dates don't crash the query
+  const formatDBDate = (dateVal: any) => {
+    if (!dateVal || dateVal === "") return null;
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  };
+
   const rows = await sql<Application[]>`
     INSERT INTO applications (
       user_id, company_name, job_title, job_url, status, priority,
@@ -41,23 +70,23 @@ export async function createApplication(
       ${userId},
       ${data.company_name},
       ${data.job_title},
-      ${data.job_url ?? null},
-      ${data.status ?? "wishlist"},
-      ${data.priority ?? "medium"},
-      ${data.work_type ?? null},
-      ${data.location ?? null},
-      ${data.salary_min ?? null},
-      ${data.salary_max ?? null},
-      ${data.application_date ?? null},
-      ${data.source ?? null},
-      ${data.excitement_level ?? null},
-      ${data.notes ?? null},
-      ${data.job_description ?? null},
-      ${data.deadline_date ?? null},
-      ${data.next_follow_up_date ?? null}
+      ${data.job_url || null},
+      ${data.status || "wishlist"},
+      ${data.priority || "medium"},
+      ${data.work_type || null},
+      ${data.location || null},
+      ${data.salary_min || null},
+      ${data.salary_max || null},
+      ${formatDBDate(data.application_date)},
+      ${data.source || null},
+      ${data.excitement_level || null},
+      ${data.notes || null},
+      ${data.job_description || null},
+      ${formatDBDate(data.deadline_date)},
+      ${formatDBDate(data.next_follow_up_date)}
     )
     RETURNING *
-  `.then(r => r)
+  `
   return rows[0]
 }
 
@@ -66,10 +95,11 @@ export async function updateApplication(
   userId: string,
   data: Partial<CreateApplicationRequest>
 ): Promise<Application | null> {
+  if (!id || !userId) return null
+
   const currentRows = await sql<any[]>`
     SELECT * FROM applications WHERE id = ${id} AND user_id = ${userId} LIMIT 1
-  `.then(r => r)
-
+  `
   if (!currentRows.length) return null
   const c = currentRows[0]
 
@@ -94,15 +124,16 @@ export async function updateApplication(
       updated_at          = NOW()
     WHERE id = ${id} AND user_id = ${userId}
     RETURNING *
-  `.then(r => r)
+  `
 
   return rows[0] ?? null
 }
 
 export async function deleteApplication(id: string, userId: string): Promise<boolean> {
+  if (!id || !userId) return false
   const result = await sql`
     DELETE FROM applications WHERE id = ${id} AND user_id = ${userId}
-  `.then(r => r)
+  `
   return (result.count ?? 0) > 0
 }
 
@@ -110,6 +141,7 @@ export async function createEvent(
   applicationId: string,
   data: { event_type: string; title: string; description?: string; event_date?: string }
 ) {
+  if (!applicationId) return null
   const rows = await sql<any[]>`
     INSERT INTO application_events (application_id, event_type, title, description, event_date)
     VALUES (
@@ -120,14 +152,16 @@ export async function createEvent(
       ${data.event_date ?? new Date().toISOString()}
     )
     RETURNING *
-  `.then(r => r)
+  `
   return rows[0]
 }
 
 export async function getDashboardStats(userId: string) {
+  if (!userId) return { total: 0, active: 0, interviews: 0, offers: 0, response_rate: 0, offer_rate: 0 }
+
   const apps = await sql<any[]>`
     SELECT status FROM applications WHERE user_id = ${userId}
-  `.then(r => r)
+  `
 
   const total      = apps.length
   const active     = apps.filter((a: any) => !["rejected","withdrawn","ghosted"].includes(a.status)).length
@@ -135,8 +169,17 @@ export async function getDashboardStats(userId: string) {
   const offers     = apps.filter((a: any) => a.status === "offer").length
   const applied    = apps.filter((a: any) => a.status !== "wishlist").length
 
-  const response_rate = applied > 0 ? Math.round((interviews + offers) / applied * 100) : 0
-  const offer_rate    = applied > 0 ? Math.round(offers / applied * 100) : 0
+  const response_rate = applied > 0 ? Math.round(((interviews + offers) / applied) * 100) : 0
+  const offer_rate    = applied > 0 ? Math.round((offers / applied) * 100) : 0
 
   return { total, active, interviews, offers, response_rate, offer_rate }
+}
+
+export async function getDocumentsByApplicationId(applicationId: string): Promise<Document[]> {
+  if (!applicationId) return []
+  return await sql<Document[]>`
+    SELECT * FROM documents 
+    WHERE application_id = ${applicationId} 
+    ORDER BY created_at DESC
+  `
 }

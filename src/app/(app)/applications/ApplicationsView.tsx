@@ -1,6 +1,6 @@
 "use client"
 import { useState } from "react"
-import { LayoutGrid, List, Table2, Plus, Search, Download, Trash2, SlidersHorizontal } from "lucide-react"
+import { LayoutGrid, List, Table2, Plus, Search, SlidersHorizontal, X } from "lucide-react"
 import { useRouter, usePathname } from "next/navigation"
 import type { Application, ApplicationStatus } from "@/types"
 import { STATUS_LABELS, STATUS_ORDER } from "@/types"
@@ -11,214 +11,124 @@ import { AddJobModal }  from "./AddJobModal"
 
 type View = "kanban" | "table" | "list"
 
-const PIPELINE_COLS: ApplicationStatus[] = ["wishlist","applied","phone_screen","interview","offer","rejected","ghosted"]
-const COL_LABELS: Record<ApplicationStatus,string> = {
-  wishlist:"Saved", applied:"Applied", phone_screen:"Screening",
-  interview:"Interview", offer:"Offer", rejected:"Rejected",
-  withdrawn:"Withdrawn", ghosted:"Ghosted",
-}
 const SORT_OPTIONS = [
   { value: "updated_at:desc",       label: "Recently updated" },
   { value: "application_date:desc", label: "Date applied (newest)" },
-  { value: "application_date:asc",  label: "Date applied (oldest)" },
   { value: "company_name:asc",      label: "Company A–Z" },
   { value: "salary_max:desc",       label: "Highest salary" },
 ]
 
 export function ApplicationsView({
-  allApps, filtered, counts, filterStatus, searchQuery, initialView
+  allApps, filtered, counts, filterStatus, searchQuery, initialView = "kanban"
 }: {
-  allApps: Application[]; filtered: Application[]; counts: Record<ApplicationStatus,number>
-  filterStatus?: string; searchQuery?: string; initialView: View
+  allApps: Application[]; filtered: Application[]; counts: Record<string, number>;
+  filterStatus?: string; searchQuery?: string; initialView?: View;
 }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [view, setView]             = useState<View>(initialView === "table" || initialView === "list" ? initialView : "kanban")
-  const [search, setSearch]         = useState(searchQuery ?? "")
-  const [sortKey, setSortKey]       = useState("updated_at:desc")
-  const [selected, setSelected]     = useState<Set<string>>(new Set())
-  const [exporting, setExporting]   = useState(false)
-  const [bulkLoading, setBulkLoading] = useState(false)
+  
+  const [view, setView] = useState<View>(initialView)
+  const [showAdd, setShowAdd] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters]       = useState({ work_type:"", priority:"", salary_min:"" })
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  function pushFilter(params: Record<string,string|undefined>) {
-    const p = new URLSearchParams()
-    if (filterStatus) p.set("status", filterStatus)
-    if (search) p.set("q", search)
-    Object.entries(params).forEach(([k,v]) => v ? p.set(k,v) : p.delete(k))
-    router.push(pathname + (p.toString() ? "?"+p.toString() : ""))
-  }
-
-  function handleSearch(v: string) {
-    setSearch(v)
-    const p = new URLSearchParams()
-    if (filterStatus) p.set("status", filterStatus)
-    if (v) p.set("q", v)
-    router.push(pathname + (p.toString() ? "?"+p.toString() : ""))
-  }
-
-  let apps = [...filtered]
-  if (filters.work_type)  apps = apps.filter(a => a.work_type === filters.work_type)
-  if (filters.priority)   apps = apps.filter(a => a.priority === filters.priority)
-  if (filters.salary_min) apps = apps.filter(a => (a.salary_min ?? 0) >= parseInt(filters.salary_min))
-  const [sf, sd] = sortKey.split(":")
-  apps.sort((a,b) => {
-    const av = (a as any)[sf] ?? ""; const bv = (b as any)[sf] ?? ""
-    const c = av < bv ? -1 : av > bv ? 1 : 0; return sd === "asc" ? c : -c
-  })
-
-  async function bulkDelete() {
-    if (!selected.size || !confirm(`Delete ${selected.size} application${selected.size>1?"s":""}?`)) return
-    setBulkLoading(true)
-    await fetch("/api/applications/bulk",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[...selected]})})
-    setSelected(new Set()); setBulkLoading(false); router.refresh()
-  }
-  async function bulkArchive() {
-    if (!selected.size) return; setBulkLoading(true)
-    await fetch("/api/applications/bulk",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[...selected],status:"withdrawn"})})
-    setSelected(new Set()); setBulkLoading(false); router.refresh()
-  }
-  async function exportCSV() {
-    setExporting(true)
-    const ids = selected.size > 0 ? [...selected] : apps.map(a=>a.id)
-    const res = await fetch("/api/applications/export?format=csv",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids})})
-    const blob = await res.blob(); const url = URL.createObjectURL(blob)
-    const a = document.createElement("a"); a.href=url; a.download="navy-export.csv"; a.click(); URL.revokeObjectURL(url)
-    setExporting(false)
+  function updateQuery(updates: Record<string, string | null>) {
+    const params = new URLSearchParams(window.location.search)
+    Object.entries(updates).forEach(([k, v]) => v ? params.set(k, v) : params.delete(k))
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
-      {/* Page header */}
-      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: "var(--text)" }}>Jobs</h1>
-          <p className="text-xs mt-0.5" style={{ color: "var(--muted-2)" }}>Keep track of your applied jobs all in one place</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs px-3 py-1.5 rounded-lg hide-mobile" style={{ border:"1px solid var(--border-2)",color:"var(--muted)" }}>
-            📅 {new Date().toLocaleDateString("en",{month:"short",day:"numeric"})} – now
-          </span>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-black"
-            style={{ background: "var(--amber)" }}
-          >
-            <Plus size={15} /> Add Job
-          </button>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 px-5 py-2.5 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
-        {/* View switcher */}
-        <div className="flex items-center gap-1 mr-1">
-          {([["kanban","Board",LayoutGrid],["list","List",List],["table","Table",Table2]] as const).map(([v,label,Icon]) => (
-            <button key={v} onClick={() => setView(v)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
-              style={{
-                background: view===v?"var(--amber-dim)":"transparent",
-                color: view===v?"var(--amber)":"var(--muted-2)",
-                border: view===v?"1px solid var(--amber-border)":"1px solid transparent"
-              }}>
-              <Icon size={13} />{label}
-            </button>
-          ))}
-        </div>
-
-        <div className="w-px h-5 mx-1 flex-shrink-0" style={{ background: "var(--border-2)" }} />
-
-        {/* Pipeline filter tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto hide-mobile" style={{ flex: 1 }}>
-          <button
-            onClick={() => pushFilter({})}
-            className="text-xs px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition-all"
-            style={{ background: !filterStatus?"var(--amber-dim)":"transparent", color: !filterStatus?"var(--amber)":"var(--muted-2)" }}
-          >
-            All <span className="ml-1 text-xs opacity-60">{allApps.length}</span>
-          </button>
-          {PIPELINE_COLS.filter(s => counts[s] > 0).map(s => (
-            <button key={s}
-              onClick={() => { setSelected(new Set()); pushFilter({status:s}) }}
-              className="text-xs px-2.5 py-1 rounded-lg font-medium whitespace-nowrap transition-all"
-              style={{ background: filterStatus===s?"var(--amber-dim)":"transparent", color: filterStatus===s?"var(--amber)":"var(--muted-2)" }}
-            >
-              {COL_LABELS[s]} <span className="ml-1 text-xs opacity-60">{counts[s]}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-1.5 ml-auto">
-          <select value={sortKey} onChange={e=>setSortKey(e.target.value)}
-            className="px-2.5 py-1.5 rounded-lg text-xs focus:outline-none hide-mobile"
-            style={{ background:"var(--input-bg)",border:"1px solid var(--border-2)",color:"var(--muted-2)" }}>
-            {SORT_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <button onClick={()=>setShowFilters(v=>!v)} className="view-btn hide-mobile"
-            style={showFilters?{background:"var(--amber-dim)",borderColor:"var(--amber-border)",color:"var(--amber)"}:{}}>
-            <SlidersHorizontal size={13} />
-          </button>
-          <div className="relative hide-mobile">
-            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color:"var(--muted)" }} />
-            <input value={search} onChange={e=>handleSearch(e.target.value)} placeholder="Filter…"
-              className="pl-8 pr-3 py-1.5 rounded-lg text-xs w-36 focus:outline-none"
-              style={{ background:"var(--input-bg)",border:"1px solid var(--border-2)",color:"var(--text)" }} />
+    <div className="flex flex-col h-[calc(100vh-65px)] bg-[#05070a]">
+      {/* Action Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 border-b border-white/5 bg-[#0a0a0a]/50">
+        <div className="flex items-center gap-4">
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-blue-500 transition-colors" size={14} />
+            <input
+              type="text"
+              placeholder="Search applications..."
+              defaultValue={searchQuery}
+              onChange={(e) => updateQuery({ q: e.target.value || null })}
+              className="pl-9 pr-4 py-2 bg-white/[0.03] border border-white/10 rounded-xl text-[13px] text-gray-300 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.05] transition-all w-64 placeholder:text-gray-700"
+            />
           </div>
-          <button onClick={exportCSV} disabled={exporting} className="view-btn hide-mobile" title="Export CSV">
-            <Download size={13}/>
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={`p-2 rounded-xl border transition-all ${showFilters ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+          >
+            <SlidersHorizontal size={16} />
           </button>
-          {selected.size>0 && (
-            <button onClick={bulkDelete} disabled={bulkLoading}
-              className="text-xs px-2.5 py-1.5 rounded-lg"
-              style={{ border:"1px solid rgba(239,68,68,0.3)",color:"#f87171" }}>
-              <Trash2 size={11} className="inline mr-1" />{selected.size}
+        </div>
+
+        <div className="flex items-center gap-2 bg-white/[0.03] p-1 rounded-xl border border-white/5">
+          {( [["kanban", LayoutGrid], ["list", List], ["table", Table2]] as [View, any][] ).map(([v, Icon]) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`p-1.5 rounded-lg transition-all ${view === v ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <Icon size={16} />
             </button>
-          )}
-        </div>
-      </div>
-
-      {/* Filter bar */}
-      {showFilters && (
-        <div className="flex items-center gap-3 px-5 py-2 flex-shrink-0 flex-wrap"
-          style={{ background:"var(--surface-2)",borderBottom:"1px solid var(--border)" }}>
-          <span className="text-xs font-semibold" style={{color:"var(--muted)"}}>Filters:</span>
-          {[
-            {key:"work_type",label:"Work type",options:[["","Any"],["onsite","On-site"],["remote","Remote"],["hybrid","Hybrid"]]},
-            {key:"priority",label:"Priority",options:[["","Any"],["high","High"],["medium","Medium"],["low","Low"]]},
-          ].map(f=>(
-            <div key={f.key} className="flex items-center gap-1.5">
-              <span className="text-xs" style={{color:"var(--muted)"}}>{f.label}:</span>
-              <select value={(filters as Record<string,string>)[f.key]}
-                onChange={e=>setFilters(p=>({...p,[f.key]:e.target.value}))}
-                className="px-2 py-1 rounded-lg text-xs focus:outline-none"
-                style={{background:"var(--input-bg)",border:"1px solid var(--border-2)",color:"var(--text)"}}>
-                {f.options.map(([v,l])=><option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
           ))}
-          <button onClick={()=>setFilters({work_type:"",priority:"",salary_min:""})} className="text-xs" style={{color:"var(--amber)"}}>Clear</button>
         </div>
-      )}
 
-      {/* View */}
-      <div className="flex-1 overflow-auto">
-        {view==="kanban" && <KanbanView apps={apps} allApps={allApps} />}
-        {view==="table" && <TableView apps={apps} selected={selected} setSelected={setSelected} />}
-        {view==="list"  && <ListView  apps={apps} selected={selected} setSelected={setSelected} />}
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[13px] font-bold transition-all shadow-lg shadow-blue-600/10 active:scale-95"
+        >
+          <Plus size={16} /> New Application
+        </button>
       </div>
 
-      {/* Footer */}
-      {view!=="kanban" && apps.length>0 && (
-        <div className="flex-shrink-0 px-5 py-2 text-xs flex items-center justify-between"
-          style={{background:"var(--surface)",borderTop:"1px solid var(--border)",color:"var(--muted)"}}>
-          <span>Showing {apps.length} of {allApps.length}</span>
-          {selected.size>0&&<span style={{color:"var(--amber)"}}>{selected.size} selected · <button onClick={bulkArchive} className="underline">archive</button></span>}
+      {/* Filter Chips / Status Bar */}
+      <div className="flex items-center gap-2 px-6 py-3 overflow-x-auto scrollbar-hide border-b border-white/5">
+        <button
+          onClick={() => updateQuery({ status: null })}
+          className={`px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap ${!filterStatus ? 'bg-white text-black' : 'text-gray-500 hover:text-gray-300'}`}
+        >
+          All ({allApps.length})
+        </button>
+        {STATUS_ORDER.map((s) => (
+          <button
+            key={s}
+            onClick={() => updateQuery({ status: s })}
+            className={`px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all border whitespace-nowrap ${
+              filterStatus === s 
+                ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' 
+                : 'border-transparent text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            {STATUS_LABELS[s]} <span className="ml-1 opacity-50">{counts[s] || 0}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Main Viewport */}
+      <div className="flex-1 overflow-auto">
+        {view === "kanban" && <KanbanView apps={filtered} allApps={allApps} />}
+        {view === "table" && <TableView apps={filtered} selected={selected} setSelected={setSelected} />}
+        {view === "list"  && <ListView  apps={filtered} selected={selected} setSelected={setSelected} />}
+      </div>
+
+      {/* Bulk Action Footer */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-6 px-6 py-3 bg-[#0a0a0a] border border-blue-500/30 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-bottom-4">
+          <span className="text-[12px] font-bold text-blue-400 uppercase tracking-widest">
+            {selected.size} Selected
+          </span>
+          <div className="h-4 w-px bg-white/10" />
+          <div className="flex items-center gap-4">
+            <button className="text-[11px] font-bold text-gray-400 hover:text-white uppercase tracking-wider">Archive</button>
+            <button className="text-[11px] font-bold text-red-400 hover:text-red-300 uppercase tracking-wider">Delete</button>
+            <button onClick={() => setSelected(new Set())} className="text-gray-500 hover:text-white">
+              <X size={16} />
+            </button>
+          </div>
         </div>
       )}
 
-      {showAddModal && <AddJobModal onClose={() => { setShowAddModal(false); router.refresh() }} />}
+      {showAdd && <AddJobModal onClose={() => setShowAdd(false)} />}
     </div>
   )
 }

@@ -14,9 +14,18 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth()
     const data = await req.json()
-    const app  = await createApplication(user.userId, data)
+
+    // Ensure required fields exist before attempting database insertion
+    if (!data.company_name || !data.job_title) {
+        return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    const app = await createApplication(user.userId, data)
     return NextResponse.json(app, { status:201 })
   } catch (e: unknown) {
+    // Log the specific database error to your terminal for debugging
+    console.error("POST Application Error:", e) 
+    
     const msg = e instanceof Error ? e.message : "Server error"
     return NextResponse.json({ error:msg },{ status: msg==="Unauthorized"?401:500 })
   }
