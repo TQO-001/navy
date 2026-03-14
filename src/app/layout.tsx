@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next"
+import type { Metadata } from "next"
 import "./globals.css"
 import { ThemeProvider } from "@/components/ThemeProvider"
 import { Geist } from "next/font/google";
@@ -10,12 +10,6 @@ export const metadata: Metadata = {
   title: "Navy — Job Tracker",
   description: "Track every job application from wishlist to offer.",
   viewport: "width=device-width, initial-scale=1",
-}
-
-// Separate export for viewport in Next.js 16
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
