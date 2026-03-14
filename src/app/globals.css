@@ -51,7 +51,31 @@ body {
   font-family: var(--font-sans), Arial, sans-serif;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   NAVY DUAL-TONE PALETTE
+   Primary action:  Blue-600  #2563eb
+   Impact accent:   Magenta   #FF277F   (--navy-pink)
+   Light highlight: Sky       #94DEFF   (--navy-sky)
+   Background:      Deep      #05070a
+───────────────────────────────────────────────────────────────────────────── */
 :root {
+  /* Navy brand tokens */
+  --navy-pink:       #FF277F;
+  --navy-pink-dim:   rgba(255, 39, 127, 0.12);
+  --navy-pink-glow:  rgba(255, 39, 127, 0.35);
+  --navy-pink-border:rgba(255, 39, 127, 0.25);
+
+  --navy-sky:        #94DEFF;
+  --navy-sky-dim:    rgba(148, 222, 255, 0.10);
+  --navy-sky-glow:   rgba(148, 222, 255, 0.30);
+  --navy-sky-border: rgba(148, 222, 255, 0.20);
+
+  --navy-blue:       #2563eb;
+  --navy-blue-dim:   rgba(37, 99, 235, 0.12);
+  --navy-blue-glow:  rgba(37, 99, 235, 0.35);
+  --navy-blue-border:rgba(37, 99, 235, 0.25);
+
+  /* ShadCN defaults */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -130,4 +154,49 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* ── Navy utility classes ─────────────────────────────────────────────────── */
+
+/* Pink button */
+.btn-pink {
+  background: var(--navy-pink);
+  color: #fff;
+  box-shadow: 0 0 20px var(--navy-pink-glow), 0 4px 12px rgba(0,0,0,0.3);
+  transition: all 0.2s ease;
+}
+.btn-pink:hover {
+  filter: brightness(1.12);
+  box-shadow: 0 0 32px var(--navy-pink-glow), 0 6px 16px rgba(0,0,0,0.4);
+}
+
+/* Blue button with sky glow */
+.btn-blue-sky {
+  background: var(--navy-blue);
+  color: #fff;
+  box-shadow: 0 0 20px var(--navy-blue-glow);
+  transition: all 0.2s ease;
+}
+.btn-blue-sky:hover {
+  background: #1d4ed8;
+  box-shadow: 0 0 32px var(--navy-sky-glow), 0 4px 20px var(--navy-blue-glow);
+}
+
+/* Sky glow ring — add to any element */
+.ring-sky-glow {
+  box-shadow: 0 0 0 1px var(--navy-sky-border), 0 0 16px var(--navy-sky-glow);
+}
+
+/* Pink glow ring */
+.ring-pink-glow {
+  box-shadow: 0 0 0 1px var(--navy-pink-border), 0 0 16px var(--navy-pink-glow);
+}
+
+/* Scrollbar hiding utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

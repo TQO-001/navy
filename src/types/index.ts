@@ -25,10 +25,21 @@ export interface Contact {
   company?: string; role?: string; linkedin_url?: string; notes?: string; created_at: string
 }
 
+// FIXED: Aligned with your SQL queries
 export interface Document {
-  id: string; user_id: string; name: string; doc_type: string
-  storage_path?: string; file_size?: number; notes?: string
-  is_default: boolean; is_link: boolean; url?: string; created_at: string
+  id: string;
+  user_id: string;
+  application_id?: string | null; // Added
+  name: string;
+  file_url: string;               // Added (replaces url)
+  file_type: string;              // Added (replaces doc_type)
+  category?: string;              // Added
+  storage_path?: string;
+  file_size?: number;
+  notes?: string;
+  is_default: boolean;
+  is_link: boolean;
+  created_at: string;
 }
 
 export interface DashboardStats {

@@ -1,16 +1,39 @@
 "use client"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { X, Briefcase, Info, DollarSign, Calendar } from "lucide-react"
+import { X } from "lucide-react"
 
-interface Props { onClose: () => void; defaultStatus?: string }
+interface Props { 
+  onClose: () => void; 
+  defaultStatus?: string 
+}
+
+interface FormState {
+  company_name: string;
+  job_title: string;
+  job_url: string;
+  status: string;
+  priority: string;
+  work_type: string;
+  location: string;
+  salary_min: string;
+  salary_max: string;
+  application_date: string;
+  source: string;
+  excitement_level: string;
+  notes: string;
+  job_description: string;
+  deadline_date: string;
+  next_follow_up_date: string;
+}
 
 export function AddJobModal({ onClose, defaultStatus = "wishlist" }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [tab, setTab] = useState<"details" | "notes">("details")
-  const [form, setForm] = useState({
+  
+  const [form, setForm] = useState<FormState>({
     company_name: "", job_title: "", job_url: "", status: defaultStatus,
     priority: "medium", work_type: "remote", location: "", salary_min: "", salary_max: "",
     application_date: new Date().toISOString().substring(0, 10),
@@ -18,16 +41,27 @@ export function AddJobModal({ onClose, defaultStatus = "wishlist" }: Props) {
     deadline_date: "", next_follow_up_date: ""
   })
 
-  function set(k: string, v: string) { setForm(p => ({ ...p, [k]: v })) }
+  function set(k: keyof FormState, v: string) { 
+    setForm(p => ({ ...p, [k]: v })) 
+  }
 
   async function submit(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true); setError("")
+    e.preventDefault(); 
+    setSaving(true); 
+    setError("")
     const res = await fetch("/api/applications", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", 
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form)
     })
-    if (res.ok) { onClose(); router.refresh() }
-    else { const d = await res.json(); setError(d.error || "Failed to save"); setSaving(false) }
+    if (res.ok) { 
+      onClose(); 
+      router.refresh() 
+    } else { 
+      const d = await res.json(); 
+      setError(d.error || "Failed to save"); 
+      setSaving(false) 
+    }
   }
 
   return (
@@ -126,7 +160,16 @@ export function AddJobModal({ onClose, defaultStatus = "wishlist" }: Props) {
   )
 }
 
-function F({ label, value, onChange, required, placeholder, type = "text" }: any) {
+interface FProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+  placeholder?: string;
+  type?: string;
+}
+
+function F({ label, value, onChange, required, placeholder, type = "text" }: FProps) {
   return (
     <div>
       <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">{label}</label>
@@ -138,7 +181,14 @@ function F({ label, value, onChange, required, placeholder, type = "text" }: any
   )
 }
 
-function Sel({ label, value, onChange, options }: any) {
+interface SelProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}
+
+function Sel({ label, value, onChange, options }: SelProps) {
   return (
     <div>
       <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">{label}</label>

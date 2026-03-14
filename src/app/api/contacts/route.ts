@@ -2,21 +2,36 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/auth"
 import sql from "@/lib/db"
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BUG FIXED: Original query selected `updated_at` which doesn't exist after
+// migration 003. Also, the single catch block returned 401 for ALL errors
+// (including DB timeouts), masking real issues and hanging the contacts page.
+// ─────────────────────────────────────────────────────────────────────────────
 export async function GET() {
+  let user
   try {
-    const user = await requireAuth()
+    user = await requireAuth()
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
     const contacts = await sql`
-      SELECT 
-        id, user_id, name, email, phone, company, role, 
-        relationship, linkedin_url, notes, application_id, 
-        last_contacted, created_at, updated_at
+      SELECT
+        id, user_id, name, email, phone, company, role,
+        relationship, linkedin_url, notes, application_id,
+        last_contacted, created_at
       FROM contacts
       WHERE user_id = ${user.userId}
       ORDER BY created_at DESC
     `
     return NextResponse.json(contacts)
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  } catch (e: unknown) {
+    console.error("GET /api/contacts DB error:", e)
+    return NextResponse.json(
+      { error: "Failed to load contacts. Please try again." },
+      { status: 500 }
+    )
   }
 }
 
