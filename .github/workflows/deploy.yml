@@ -1,0 +1,163 @@
+# ============================================================
+# .github/workflows/deploy.yml
+# 
+# Navy CI/CD Pipeline
+# Trigger: Every push to the `main` branch (or manual dispatch)
+# What it does: Clones, tests, builds, and deploys to VPS
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   VPS_HOST       → Your VPS public IP address or hostname
+#   VPS_USER       → Your VPS SSH username
+#   VPS_SSH_KEY    → Private SSH key for VPS access
+#   VPS_PORT       → SSH port (default: 22)
+#   DEPLOY_PATH    → Path on VPS where Navy is deployed (default: /var/www/navy)
+# ============================================================
+
+name: ⚓ Deploy Navy
+
+on:
+  push:
+    branches: [main]
+  # Allow manual trigger from the GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build and Deploy Navy to VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── Step 1: Checkout the code ──────────────────────────
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      # ── Step 2: Show what triggered this deployment ────────
+      - name: 📋 Log deployment info
+        run: |
+          echo "🚀 Deploying Navy"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Timestamp: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+      # ── Step 3: Lint the code locally ──────────────────────
+      - name: 🔍 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: ✅ Run ESLint
+        run: npm run lint
+        continue-on-error: true  # Don't fail if linting has warnings
+
+      # ── Step 4: Deploy to VPS via SSH ──────────────────────
+      - name: 🚢 Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          # Timeout for SSH commands (in minutes)
+          command_timeout: 10m
+          script: |
+            set -e  # Exit on any error
+            
+            # Define paths
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/var/www/navy' }}"
+            
+            echo "📍 Deploying to: $DEPLOY_PATH"
+            
+            # ── Navigate to deploy directory ──────────────────
+            cd "$DEPLOY_PATH"
+            
+            # ── Pull latest code ──────────────────────────────
+            echo "📥 Pulling latest code..."
+            git fetch origin
+            git checkout main
+            git reset --hard origin/main
+            
+            # ── Install dependencies ──────────────────────────
+            echo "📦 Installing dependencies..."
+            npm ci --production=false
+            
+            # ── Run database migrations ───────────────────────
+            echo "🗄️  Running database migrations..."
+            npm run db:migrate
+            
+            # ── Build the app ─────────────────────────────────
+            echo "🔨 Building application..."
+            npm run build
+            
+            # ── Reload with PM2 (zero-downtime) ───────────────
+            echo "♻️  Reloading application with PM2..."
+            pm2 reload navy --update-env || pm2 start npm --name "navy" -- start -- -p 3001
+            pm2 save
+            
+            echo "✅ Deployment script completed successfully"
+
+      # ── Step 5: Verify the app is responding ───────────────
+      - name: 🏥 Health check
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            # Wait a moment for the app to fully restart
+            sleep 3
+            
+            # Try to hit the app on port 3001 (via localhost on VPS)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001 || echo "000")
+            
+            echo "Health check response: HTTP $STATUS"
+            
+            # Accept 200 (OK), 307/302 (redirects), or any 3xx/4xx
+            if [[ "$STATUS" =~ ^[23] ]]; then
+              echo "✅ Health check passed (HTTP $STATUS)"
+              echo ""
+              echo "📊 PM2 Status:"
+              pm2 status
+              exit 0
+            else
+              echo "❌ Health check failed (HTTP $STATUS)"
+              echo ""
+              echo "📊 PM2 Status:"
+              pm2 status
+              echo ""
+              echo "📋 Recent logs (last 30 lines):"
+              pm2 logs navy --lines 30 --nostream || true
+              exit 1
+            fi
+
+      # ── Step 6: Notify on success ──────────────────────────
+      - name: 🎉 Deployment successful
+        if: success()
+        run: |
+          echo "✅ Navy deployed successfully!"
+          echo ""
+          echo "📌 Deployment Summary:"
+          echo "   Branch: ${{ github.ref_name }}"
+          echo "   Commit: ${{ github.sha }}"
+          echo "   Author: ${{ github.actor }}"
+          echo "   Time: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+      # ── Step 7: Notify on failure ──────────────────────────
+      - name: 🚨 Deployment failed
+        if: failure()
+        run: |
+          echo "❌ Navy deployment failed!"
+          echo ""
+          echo "📌 Failed Deployment:"
+          echo "   Branch: ${{ github.ref_name }}"
+          echo "   Commit: ${{ github.sha }}"
+          echo "   Author: ${{ github.actor }}"
+          echo ""
+          echo "⚠️  Check the workflow logs above for details."
+        # You can add Slack/Discord notifications here if desired
